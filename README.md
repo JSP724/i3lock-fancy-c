@@ -221,8 +221,19 @@ make debug
 ```
 i3lock-fancy-c/
 ├── i3lock-fancy-c.cpp # Main code
-├── Makefile # C system
-`maim` ~50ms, `scrot` ~80ms, `import` ~200ms
+├── Makefile # System build
+├── icons/             # Recursos
+│   └── lock.png      # Icono de candado
+├── doc/              # Documentación
+│   └── i3lock-fancy-c.1  # Página de manual
+└── README.md         # Este archivo
+```
+
+---
+
+## Performance notes
+
+- **Captura**: `maim` ~50ms, `scrot` ~80ms, `import` ~200ms
 - **Processing**: Parallelization improves ~20-30% on multi-core
 - **Total**: ~300-500ms depending on tools and hardware
 
