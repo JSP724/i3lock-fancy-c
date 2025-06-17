@@ -19,6 +19,7 @@
 #include <span>
 #include <algorithm>
 #include <sys/wait.h>
+#include <unordered_map>
 
 // Compile-time configuration
 namespace Config {
@@ -27,7 +28,7 @@ namespace Config {
     static constexpr size_t OVERLAY_CAPACITY = 2048;
     static constexpr int LOCK_ICON_SIZE = 60;
     static constexpr int TEXT_OFFSET_Y = 160;
-    static constexpr bool ENABLE_TIMING = false; // Compile-time debug flag
+    static constexpr bool ENABLE_TIMING = true; // Compile-time debug flag
 }
 
 class FastI3Lock {
@@ -45,7 +46,7 @@ private:
     // Compile-time constants with inline storage
     static constexpr std::string_view SCRIPT_PATH = "/usr/share/i3lock-fancy-c";
     static constexpr std::string_view DEFAULT_HUE = "-level 0%,100%,0.6";
-    static constexpr std::string_view DEFAULT_EFFECT = "-filter Gaussian -resize 20% -define filter:sigma=1.5 -resize 500.5%";
+    static constexpr std::string_view DEFAULT_EFFECT = "-filter Gaussian -resize 10% -define filter:sigma=1.5 -resize 1000% +profile "*"";
     static constexpr std::string_view PIXELATE_EFFECT = "-scale 10% -scale 1000%";
     static constexpr std::string_view GREYSCALE_HUE = "-level 0%,100%,0.6 -set colorspace Gray -separate -average";
     
@@ -162,26 +163,20 @@ private:
     }
     
     // Compile-time localization lookup
-    constexpr std::string_view get_localized_text_fast() const noexcept {
-        const char* lang = std::getenv("LANG");
-        if (!lang) return "Type password to unlock";
-        
-        // Optimized prefix matching
-        const std::string_view lang_sv{lang};
-        const char prefix = lang_sv.size() >= 2 ? lang_sv[0] : '\0';
-        const char second = lang_sv.size() >= 2 ? lang_sv[1] : '\0';
-        
-        switch (prefix) {
-            case 'd': return second == 'e' ? "Bitte Passwort eingeben" : "Type password to unlock";
-            case 'e': 
-                if (second == 'n') return "Type password to unlock";
-                if (second == 's') return "Ingrese su contraseña";
-                return "Type password to unlock";
-            case 'f': return second == 'r' ? "Entrez votre mot de passe" : "Type password to unlock";
-            case 'p': return second == 'l' ? "Podaj hasło" : "Type password to unlock";
-            default: return "Type password to unlock";
+    std::string_view get_localized_text_fast() noexcept {
+        const char* lang_c = std::getenv("LANG");
+        if (!lang_c) return "Type password to unlock";
+        std::string_view lang_sv{lang_c};
+        // Extraemos los dos primeros caracteres (código de idioma)
+        std::string_view code = lang_sv.size() >= 2 ? lang_sv.substr(0, 2) : "";
+        if        (code == "de") { return "Bitte Passwort eingeben";
+        } else if (code == "es") { return "Ingrese su contraseña";
+        } else if (code == "fr") { return "Entrez votre mot de passe";
+        } else if (code == "pl") { return "Podaj hasło";
+        } else {                   return "Type password to unlock";
         }
     }
+
     
     // Pre-compiled regex for maximum performance
     inline static const std::regex resolution_regex_{R"((\d+)x(\d+)\+(\d+)\+(\d+))"};
@@ -334,6 +329,10 @@ public:
         hue_params_.reserve(128);
         effect_params_.reserve(128);
         font_.reserve(64);
+        // Si la detección falló, garantizamos un valor por defecto
+        if (font_.empty()) {
+            font_ = "DejaVu-Sans";
+        }
         text_.reserve(64);
         screenshot_command_.reserve(256);
     }
