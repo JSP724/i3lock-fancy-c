@@ -46,7 +46,7 @@ private:
     // Compile-time constants with inline storage
     static constexpr std::string_view SCRIPT_PATH = "/usr/share/i3lock-fancy-c";
     static constexpr std::string_view DEFAULT_HUE = "-level 0%,100%,0.6";
-    static constexpr std::string_view DEFAULT_EFFECT = "-filter Gaussian -resize 10% -define filter:sigma=1.5 -resize 1000% +profile "*"";
+    static constexpr std::string_view DEFAULT_EFFECT = "-filter Gaussian -resize 10% -define filter:sigma=1.5 -resize 1000% +profile '*'";
     static constexpr std::string_view PIXELATE_EFFECT = "-scale 10% -scale 1000%";
     static constexpr std::string_view GREYSCALE_HUE = "-level 0%,100%,0.6 -set colorspace Gray -separate -average";
     
