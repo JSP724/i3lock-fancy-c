@@ -12,7 +12,7 @@
 * **Desenfoque o pixelado**: Modos configurables desde CLI.
 * **Multimonitor**: Detección automática de pantallas con `xrandr`.
 * **Personalización básica**: Fuente ajustable mediante `-f <fuente>`.
-
+Nota: Como se vé esta lago mas limitado que i3lock-fancy, pero se mantienen las opciones más usadas
 ---
 
 ## Dependencias
@@ -101,6 +101,13 @@ Los recursos se instalan en `/usr/share/i3lock-fancy-c/`.
 1. Abre un *issue* para sugerencias o errores.
 2. Crea un *branch* con tus cambios.
 3. Haz un *pull request* detallado.
+
+---
+
+Notas:
+- Es posible que no se note una gran mejoria a comparacion del i3lock-fancy original, ya que lo que consume más recursos es la captura de la imagen y su procesamiento
+- Se tiene pensado añadir más idiomas
+- Se tiene pensado añadir unos archivos extra para configurarlo más facilmente
 
 ---
 
