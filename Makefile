@@ -3,7 +3,7 @@ PREFIX = /usr
 SHRDIR = /usr/share
 BINDIR = /usr/bin
 CXX = g++
-CXXFLAGS = -std=c++20 -O3 -march=native -flto=auto -DNDEBUG -s -pthread
+CXXFLAGS = -std=c++20 -O3 -march=native -flto=auto -DNDEBUG -s -lpthread
 SRC = i3lock-fancy-c.cpp
 
 # Debug build flags
