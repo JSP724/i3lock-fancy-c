@@ -12,7 +12,10 @@
 #include <sstream>
 #include <string_view>
 #include <cstring>
-//verion optimizada de i3lock-fancy, de bash a c++
+#include <thread>
+#include <future>
+#include <chrono>
+//version optimizada de i3lock-fancy, de bash a c++
 
 class I3LockFancy {
 private:
@@ -21,6 +24,7 @@ private:
     std::string font;
     std::string image_path;
     std::string text;
+    std::string screenshot_command;
     
     static constexpr std::string_view SCRIPT_PATH = "/usr/share/i3lock-fancy-c";
     static constexpr std::string_view DEFAULT_HUE = "-level 0%,100%,0.6";
@@ -42,6 +46,56 @@ private:
         }
         
         return result;
+    }
+    
+    // Check if a command exists in PATH
+    bool command_exists(const std::string& command) const {
+        const std::string check_cmd = "which " + command + " >/dev/null 2>&1";
+        return std::system(check_cmd.c_str()) == 0;
+    }
+    
+    // Detect best screenshot tool available
+    std::string detect_screenshot_tool() const {
+        // Priority order: maim (fastest) -> scrot -> import (fallback)
+        const std::vector<std::pair<std::string, std::string>> tools = {
+            {"maim", "maim \"{}\""},
+            {"scrot", "scrot -z \"{}\""},
+            {"import", "import -window root \"{}\""}
+        };
+        
+        for (const auto& [tool, cmd_template] : tools) {
+            if (command_exists(tool)) {
+                std::string cmd = cmd_template;
+                size_t pos = cmd.find("{}");
+                if (pos != std::string::npos) {
+                    cmd.replace(pos, 2, image_path);
+                }
+                return cmd;
+            }
+        }
+        
+        // Fallback to import without checking (should always exist with ImageMagick)
+        return "import -window root \"" + image_path + "\"";
+    }
+    
+    // Build custom screenshot command from arguments
+    std::string build_custom_screenshot_command(const std::vector<std::string>& args) const {
+        if (args.empty()) return detect_screenshot_tool();
+        
+        std::string cmd;
+        cmd.reserve(256);
+        
+        for (size_t i = 0; i < args.size(); ++i) {
+            if (i > 0) cmd += " ";
+            cmd += args[i];
+        }
+        
+        // Add image path if not already present
+        if (cmd.find(image_path) == std::string::npos) {
+            cmd += " \"" + image_path + "\"";
+        }
+        
+        return cmd;
     }
     
     // Optimized font detection with early exit
@@ -91,6 +145,7 @@ private:
         // Use string_view for efficient prefix comparison
         const std::string_view lang_sv(lang);
         if (lang_sv.starts_with("de_")) return "Bitte Passwort eingeben";
+        if (lang_sv.starts_with("en_")) return "Type password to unlock";
         if (lang_sv.starts_with("es_")) return "Ingrese su contraseña";
         if (lang_sv.starts_with("fr_")) return "Entrez votre mot de passe";
         if (lang_sv.starts_with("pl_")) return "Podaj hasło";
@@ -128,15 +183,55 @@ private:
                        " -strokewidth 2 -annotate +" + std::to_string(midxt) + "+" + std::to_string(midyt) + 
                        " \"" + text + "\" -fill lightgrey -stroke lightgrey -strokewidth 1"
                        " -annotate +" + std::to_string(midxt) + "+" + std::to_string(midyt) + 
-                       " \"" + text + "\" \"" + std::string(SCRIPT_PATH) + "/lock.png\""
+                       " \"" + text + "\" \"" + std::string(SCRIPT_PATH) + "/icons/lock.png\""
                        " -geometry +" + std::to_string(midxi) + "+" + std::to_string(midyi) + " -composite";
         }
         
         return overlays;
     }
     
-    // Single-pass image processing
-    void apply_effects() const {
+    // Parallelized image processing
+    void apply_effects_parallel() const {
+        auto start_time = std::chrono::high_resolution_clock::now();
+        
+        // Start overlay generation in parallel (I/O bound - xrandr call)
+        auto overlay_future = std::async(std::launch::async, [this]() {
+            return generate_lock_overlays();
+        });
+        
+        // Apply base effects to image (CPU bound)
+        std::string base_cmd;
+        base_cmd.reserve(512);
+        base_cmd = "convert \"" + image_path + "\" " + hue_params + " " + effect_params + " \"" + image_path + "\"";
+        
+        if (std::system(base_cmd.c_str()) != 0) [[unlikely]] {
+            throw std::runtime_error("ImageMagick base effects failed");
+        }
+        
+        // Wait for overlay generation and apply overlays
+        const auto overlays = overlay_future.get();
+        
+        if (!overlays.empty()) {
+            std::string overlay_cmd;
+            overlay_cmd.reserve(1024 + overlays.size());
+            overlay_cmd = "convert \"" + image_path + "\" " + overlays + " \"" + image_path + "\"";
+            
+            if (std::system(overlay_cmd.c_str()) != 0) [[unlikely]] {
+                throw std::runtime_error("ImageMagick overlay composition failed");
+            }
+        }
+        
+        auto end_time = std::chrono::high_resolution_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
+        
+        // Optional: Print timing info for debugging (can be removed in release)
+        #ifdef DEBUG_TIMING
+        std::cerr << "Image processing took: " << duration.count() << "ms\n";
+        #endif
+    }
+    
+    // Legacy single-threaded processing (fallback)
+    void apply_effects_sequential() const {
         // Build complete command in one go
         std::string cmd;
         cmd.reserve(1024);
@@ -164,13 +259,35 @@ private:
         }
     }
 
+    // Take screenshot with custom or auto-detected command
+    void take_screenshot() const {
+        auto start_time = std::chrono::high_resolution_clock::now();
+        
+        if (std::system(screenshot_command.c_str()) != 0) [[unlikely]] {
+            throw std::runtime_error("Screenshot failed with command: " + screenshot_command);
+        }
+        
+        // Verify screenshot was created
+        if (!std::filesystem::exists(image_path)) [[unlikely]] {
+            throw std::runtime_error("Screenshot file was not created: " + image_path);
+        }
+        
+        auto end_time = std::chrono::high_resolution_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
+        
+        #ifdef DEBUG_TIMING
+        std::cerr << "Screenshot took: " << duration.count() << "ms using: " << screenshot_command << "\n";
+        #endif
+    }
+
 public:
     I3LockFancy() 
         : hue_params(DEFAULT_HUE)
         , effect_params(DEFAULT_EFFECT)
         , font(get_default_font())
         , image_path(create_temp_file())
-        , text(get_localized_text()) {}
+        , text(get_localized_text())
+        , screenshot_command(detect_screenshot_tool()) {}
     
     ~I3LockFancy() {
         std::filesystem::remove(image_path);
@@ -183,12 +300,22 @@ public:
     I3LockFancy& operator=(I3LockFancy&&) = default;
     
     static void print_help(std::string_view program_name) noexcept {
-        std::cout << "Usage: " << program_name << " [options]\n\n"
+        std::cout << "Usage: " << program_name << " [options] [-- screenshot_command]\n\n"
                   << "Options:\n"
                   << "    -h, --help       This help menu.\n"
                   << "    -g, --greyscale  Set background to greyscale instead of color.\n"
                   << "    -p, --pixelate   Pixelate the background instead of blur, runs faster.\n"
-                  << "    -f <fontname>, --font <fontname>  Set a custom font.\n\n";
+                  << "    -f <fontname>, --font <fontname>  Set a custom font.\n"
+                  << "    --sequential     Use sequential processing instead of parallel.\n\n"
+                  << "Screenshot commands:\n"
+                  << "    Auto-detected priority: maim > scrot > import\n"
+                  << "    Custom: -- scrot -z\n"
+                  << "    Custom: -- maim --format png\n\n"
+                  << "Examples:\n"
+                  << "    " << program_name << "                    # Auto-detect best tool\n"
+                  << "    " << program_name << " -g -p              # Greyscale + pixelate\n"
+                  << "    " << program_name << " -- scrot -z        # Use scrot with compression\n"
+                  << "    " << program_name << " -- maim --format png  # Use maim with PNG format\n\n";
     }
     
     void set_greyscale() noexcept { hue_params = GREYSCALE_HUE; }
@@ -197,14 +324,19 @@ public:
         if (!custom_font.empty()) font = custom_font;
     }
     
-    void run() const {
-        // Take screenshot with error checking
-        const std::string screenshot_cmd = "import -window root \"" + image_path + "\"";
-        if (std::system(screenshot_cmd.c_str()) != 0) [[unlikely]] {
-            throw std::runtime_error("Screenshot failed");
+    void set_screenshot_command(const std::vector<std::string>& args) {
+        screenshot_command = build_custom_screenshot_command(args);
+    }
+    
+    void run(bool use_parallel = true) const {
+        take_screenshot();
+        
+        if (use_parallel && std::thread::hardware_concurrency() > 1) {
+            apply_effects_parallel();
+        } else {
+            apply_effects_sequential();
         }
         
-        apply_effects();
         execute_i3lock();
     }
 };
@@ -212,6 +344,7 @@ public:
 int main(int argc, char* argv[]) {
     try {
         I3LockFancy i3lock_fancy;
+        bool use_sequential = false;
         
         // Optimized option parsing with compile-time array
         static constexpr option long_options[] = {
@@ -219,6 +352,7 @@ int main(int argc, char* argv[]) {
             {"greyscale", no_argument, nullptr, 'g'},
             {"pixelate", no_argument, nullptr, 'p'},
             {"font", required_argument, nullptr, 'f'},
+            {"sequential", no_argument, nullptr, 's'},
             {nullptr, 0, nullptr, 0}
         };
         
@@ -227,7 +361,7 @@ int main(int argc, char* argv[]) {
             switch (opt) {
                 case 'h':
                     I3LockFancy::print_help(argv[0]);
-                    return 1;
+                    return 0;
                 case 'g':
                     i3lock_fancy.set_greyscale();
                     break;
@@ -237,13 +371,26 @@ int main(int argc, char* argv[]) {
                 case 'f':
                     i3lock_fancy.set_font(optarg ? optarg : "");
                     break;
+                case 's':
+                    use_sequential = true;
+                    break;
                 default:
-                    std::cerr << "error\n";
+                    std::cerr << "Error: Unknown option. Use -h for help.\n";
                     return 1;
             }
         }
         
-        i3lock_fancy.run();
+        // Handle custom screenshot command after --
+        std::vector<std::string> screenshot_args;
+        for (int i = optind; i < argc; i++) {
+            screenshot_args.emplace_back(argv[i]);
+        }
+        
+        if (!screenshot_args.empty()) {
+            i3lock_fancy.set_screenshot_command(screenshot_args);
+        }
+        
+        i3lock_fancy.run(!use_sequential);
         
     } catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << '\n';
