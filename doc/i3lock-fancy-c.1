@@ -1,40 +1,81 @@
-.TH I3LOCK-FANCY-C 1 2017-06-26
-
+." Man page for i3lock-fancy-c
+.TH I3LOCK-FANCY-C 1 "2025-06-17" "i3lock-fancy-c 1.0"
 .SH NAME
-.B i3lock-fancy-c
-- Bash script around i3lock for fancy effect
-
-.SH DESCRIPTION
-
-Takes a screenshot of the desktop, blurs the background and adds a lock icon and
-text. This blurred image is then given to \fBi3lock\fR as the lockscreen
-background.
+i3lock-fancy-c - optimized C++ wrapper around i3lock for a customizable lockscreen
 
 .SH SYNOPSIS
+.B i3lock-fancy-c
+\[\fIOPTIONS\fR]
 
-.B i3lock-fancy-c [options]
+.SH DESCRIPTION
+.i i3lock-fancy-c
+captures the current desktop, applies a blur or pixelation effect, overlays a lock icon and a password prompt, then invokes \fBi3lock\fR with the resulting image as the lockscreen background.
+
+It supports localized prompts based on the \fILANG\fR environment variable (e.g., \fIes\_\fR for Spanish).
 
 .SH OPTIONS
+.TP
+\fB-h\fR, \fB--help\fR
+Display this help message and exit.
 
 .TP
-\fB-h, --help\fP
-Display a help screen and exit.
+\fB-g\fR, \fB--greyscale\fR
+Convert the background image to greyscale instead of color.
 
 .TP
-\fB-g, --greyscale\fP
-Set background to greyscale instead of color.
+\fB-p\fR, \fB--pixelate\fR
+Pixelate the background instead of blurring. Faster but less smooth.
 
 .TP
-\fB-p, --pixelate\fP
-Pixelate the background instead of blur, runs faster.
+\fB-f \fIFONTNAME\fR, \fB--font \fIFONTNAME\fR
+Use a custom font for the password prompt. Defaults to the system font if unspecified.
+
+.SH ENVIRONMENT
+.TP
+\fILANG\fR
+Determines the language for the prompt text. Recognized prefixes: \fIde\_\fR (German), \fIes\_\fR (Spanish), \fIfr\_\fR (French), \fIpl\_\fR (Polish). Defaults to English: "Type password to unlock".
+
+.SH DEPENDENCIES
+.i i3lock-fancy-c
+requires:
+.IP 4
+\fBImageMagick\fR (for \fIimport\fR and \fIconvert\fR commands)
+.IP 4
+\fBi3lock\fR (for locking the screen)
+
+.SH EXIT STATUS
+.TP
+\fI0\fR
+Success.
 
 .TP
-\fB-f <fontname>, --font <fontname>\fP
-Set a custom font.
+\fI>0\fR
+An error occurred (e.g., screenshot failed, image processing error, or i3lock failed).
+
+.SH EXAMPLES
+.TP
+Blur the screen and lock (default):
+.RS
+.i
+\$ i3lock-fancy-c
+.RE
+
+.TP
+Pixelate and use custom font:
+.RS
+.i
+\$ i3lock-fancy-c -p -f "Mononoki Nerd Font"
+.RE
+
+.TP
+Lock with greyscale background:
+.RS
+.i
+\$ i3lock-fancy-c --greyscale
+.RE
 
 .SH SEE ALSO
 \fBi3lock\fR(1)
 
 .SH AUTHORS
-
-JSP24
+Written by JSP724.
